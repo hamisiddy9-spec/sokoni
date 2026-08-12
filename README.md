@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sokoni — Multi-Vendor Marketplace
 
-## Getting Started
+Sokoni ni marketplace ya kisasa ya multi-vendor — rewrite ya [Ecommerce-CodeIgniter-Bootstrap](https://github.com/kirilkirkov/Ecommerce-CodeIgniter-Bootstrap) (MIT) kwenye stack ya kisasa.
 
-First, run the development server:
+**Stack:** Next.js 16 (App Router, Turbopack) · TypeScript · Tailwind CSS v4 · Drizzle ORM · PostgreSQL (Supabase/Neon) · Stripe · Hono API
+
+## Features
+
+- 🏪 **Multi-vendor** — vendors wanajiandikisha, admin anaidhinisha, kila vendor ana dashboard yake
+- 🛍️ **Bidhaa** — categories (tree), featured, search, sorting, stock tracking, digital products
+- 🛒 **Cart** — guest cart (cookie-based) + quantity management
+- 💳 **Malipo** — Stripe PaymentIntent (test mode) + dev mode bila keys
+- 🏷️ **Discount codes** — percent/fixed, min subtotal, max uses, expiry
+- 👑 **Admin panel** — vendor approval, stats, discount management
+- 📦 **Orders** — order numbers, snapshots za bidhaa, webhook ya Stripe
+- 🔐 **Auth** — Supabase Auth (email + Google OAuth)
+
+## Quick start (local)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+cp .env.example .env   # weka DATABASE_URL + Supabase + Stripe keys
+npm run db:push        # create tables (drizzle-kit push)
+npm run db:seed        # seed test data
+npm run dev            # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Database
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run db:generate    # generate migration
+npm run db:migrate     # run migrations
+npm run db:seed        # seed: categories, vendors, products, discount codes
+npm run db:studio      # Drizzle Studio UI
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Test data (seed)
 
-## Learn More
+| Role | Email | Notes |
+|------|-------|-------|
+| Admin | admin@sokoni.app | Admin panel: /admin |
+| Vendor 1 | vendor1@example.com | TechKwanza (approved) |
+| Vendor 2 | vendor2@example.com | StyleHaus (approved) |
 
-To learn more about Next.js, take a look at the following resources:
+Discount codes: `WELCOME10`, `SAVE5`, `DIGITAL20`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Test card (Stripe): `4242 4242 4242 4242` · future date · any CVC
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploy
 
-## Deploy on Vercel
+```bash
+vercel deploy --prod
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Env vars zinazohitajika: `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_URL`.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Project structure
+
+```
+src/
+├── app/
+│   ├── page.tsx              # Landing
+│   ├── products/             # Catalog + detail
+│   ├── cart/                 # Cart
+│   ├── checkout/             # Checkout + success
+│   ├── auth/                 # Sign in / register + callback
+│   ├── vendor/               # Vendor landing, register, dashboard
+│   ├── admin/                # Admin dashboard, discounts, vendor approval
+│   ├── api/[[...route]]/     # Hono API (checkout, webhooks, orders)
+│   └── actions/              # Server actions (cart, vendor, admin)
+├── components/               # UI components
+├── db/
+│   ├── schema.ts             # Drizzle schema (users→vendors→products→orders)
+│   └── index.ts              # DB client
+└── lib/                      # env, stripe, supabase, queries, utils
+```
+
+## License
+
+MIT — original CodeIgniter project na hii rewrite zote ni MIT.
