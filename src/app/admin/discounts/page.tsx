@@ -3,6 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createDiscount } from "@/app/actions/admin";
+import Button from "@/components/ui/Button";
+import Card from "@/components/ui/Card";
+import PageHeader from "@/components/ui/PageHeader";
+import { TicketPercent } from "lucide-react";
 
 export default function DiscountForm() {
   const router = useRouter();
@@ -43,28 +47,31 @@ export default function DiscountForm() {
   }
 
   const inputCls =
-    "mt-1 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-emerald-600 focus:outline-none";
+    "mt-1 w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm focus:border-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500/20";
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-14 sm:px-6">
-      <div className="rounded-2xl border border-gray-200 bg-white p-8">
-        <h1 className="text-2xl font-bold text-gray-900">+ Discount code</h1>
+    <div className="mx-auto max-w-lg px-4 py-12 sm:px-6">
+      <PageHeader title="+ Discount code" description="Unda code mpya ya punguzo" />
+      <Card className="p-6">
         {error && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             {error}
           </div>
         )}
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-sm font-semibold text-gray-700">Code *</label>
-            <input
-              type="text"
-              required
-              value={form.code}
-              onChange={(e) => update("code", e.target.value.toUpperCase())}
-              className={`${inputCls} uppercase`}
-              placeholder="e.g. WELCOME10"
-            />
+            <div className="relative mt-1">
+              <TicketPercent className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                required
+                value={form.code}
+                onChange={(e) => update("code", e.target.value.toUpperCase())}
+                className={`${inputCls} pl-10 uppercase`}
+                placeholder="e.g. WELCOME10"
+              />
+            </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -123,15 +130,11 @@ export default function DiscountForm() {
               className={inputCls}
             />
           </div>
-          <button
-            type="submit"
-            disabled={pending}
-            className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:bg-gray-300"
-          >
+          <Button type="submit" disabled={pending} size="lg" className="w-full">
             {pending ? "Inaunda..." : "Create code"}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }
