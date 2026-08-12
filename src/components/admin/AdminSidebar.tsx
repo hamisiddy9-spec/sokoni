@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   Menu,
   ShieldCheck,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 import { useState } from "react";
@@ -31,6 +32,7 @@ const navSections: {
   {
     label: "Management",
     items: [
+      { href: "/admin/pending", label: "WhatsApp Inbox", icon: Inbox },
       { href: "/admin/vendors", label: "Vendors", icon: Store },
       { href: "/admin/products", label: "Products", icon: Package },
       { href: "/admin/orders", label: "Orders", icon: ShoppingCart },

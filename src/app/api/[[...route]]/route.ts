@@ -4,8 +4,10 @@ import { z } from "zod";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { carts, cartItems, products, orders, orderItems, discounts, productImages } from "@/db/schema";
+import { pendingProducts } from "@/db/pending-schema";
 import { stripe, hasStripeConfig } from "@/lib/stripe";
 import { generateOrderNumber, computeDiscount } from "@/lib/utils";
+import { createHash } from "crypto";
 
 const app = new Hono().basePath("/api");
 
@@ -24,6 +26,107 @@ const checkoutSchema = z.object({
     })
     .optional(),
   discountCode: z.string().optional(),
+});
+
+/* ============================================================
+   WHATSAPP INGESTION — bot inaweka products kutoka groups/channels
+   ============================================================ */
+const whatsappIngestSchema = z.object({
+  // Source info
+  sourceGroupId: z.string().optional(),
+  sourceGroupName: z.string().optional(),
+  sellerName: z.string().optional(),
+  sellerPhone: z.string().optional(), // e.g. 2557xxxxxxxx@c.us
+  messageId: z.string().optional(),
+  postedAt: z.string().optional(), // ISO date
+  // Product data
+  rawText: z.string().optional(),
+  images: z.array(z.string()).default([]),
+  // AI-extracted
+  make: z.string().optional(),
+  model: z.string().optional(),
+  price: z.string().optional(),
+  currency: z.string().default("TZS"),
+  suggestedName: z.string().optional(),
+  suggestedDescription: z.string().optional(),
+  suggestedCategory: z.string().optional(),
+  aiConfidence: z.number().int().min(0).max(100).default(0),
+});
+
+/**
+ * POST /api/whatsapp/ingest
+ * WhatsApp bot inaita hii kila bidhaa inapopostwa kwenye group/channel.
+ * Inaweka pending product — admin anathibitisha kwenye /admin/pending.
+ */
+app.post("/whatsapp/ingest", async (c) => {
+  try {
+    const body = await c.req.json().catch(() => null);
+    const parsed = whatsappIngestSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: "Invalid payload", details: parsed.error.flatten() }, 400);
+    }
+    const data = parsed.data;
+
+    // Duplicate detection — hash ya rawText + images
+    const hashInput = `${data.rawText || ""}|${(data.images || []).join(",")}`;
+    const contentHash = createHash("sha256").update(hashInput).digest("hex").slice(0, 32);
+
+    const existing = await db
+      .select()
+      .from(pendingProducts)
+      .where(eq(pendingProducts.contentHash, contentHash))
+      .limit(1);
+    if (existing[0]) {
+      return c.json({ ok: true, duplicate: true, id: existing[0].id });
+    }
+
+    const [row] = await db
+      .insert(pendingProducts)
+      .values({
+        sourceGroupId: data.sourceGroupId,
+        sourceGroupName: data.sourceGroupName,
+        sellerName: data.sellerName,
+        sellerPhone: data.sellerPhone,
+        messageId: data.messageId,
+        postedAt: data.postedAt ? new Date(data.postedAt) : new Date(),
+        rawText: data.rawText,
+        images: data.images,
+        make: data.make,
+        model: data.model,
+        price: data.price,
+        currency: data.currency,
+        suggestedName: data.suggestedName,
+        suggestedDescription: data.suggestedDescription,
+        suggestedCategory: data.suggestedCategory,
+        aiConfidence: data.aiConfidence,
+        contentHash,
+        status: "pending",
+      })
+      .returning();
+
+    return c.json({ ok: true, duplicate: false, id: row.id });
+  } catch (err: any) {
+    console.error("whatsapp ingest error:", err);
+    return c.json({ error: err?.message || "Ingest imeshindikana." }, 500);
+  }
+});
+
+/**
+ * GET /api/whatsapp/pending
+ * List ya pending products (kwa admin / bot status).
+ */
+app.get("/whatsapp/pending", async (c) => {
+  try {
+    const rows = await db
+      .select()
+      .from(pendingProducts)
+      .where(eq(pendingProducts.status, "pending"))
+      .orderBy(desc(pendingProducts.createdAt))
+      .limit(50);
+    return c.json({ products: rows });
+  } catch (err: any) {
+    return c.json({ error: err?.message || "Imeshindikana." }, 500);
+  }
 });
 
 /**
