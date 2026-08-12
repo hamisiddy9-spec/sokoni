@@ -1,5 +1,5 @@
 import "server-only";
-import { eq, and, desc, asc, ilike, or, sql } from "drizzle-orm";
+import { eq, and, desc, asc, ilike, or, sql, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { products, productImages, vendors, categories } from "@/db/schema";
 import type { ProductWithImages } from "@/lib/types";
@@ -11,17 +11,17 @@ export async function enrichProducts(rows: any[]): Promise<ProductWithImages[]> 
   const images = await db
     .select()
     .from(productImages)
-    .where(sql`${productImages.productId} = ANY(${ids})`)
+    .where(inArray(productImages.productId, ids))
     .orderBy(productImages.sortOrder);
   const vendorIds = [...new Set(rows.map((r) => r.vendorId).filter(Boolean))];
   const vendorsRows =
     vendorIds.length > 0
-      ? await db.select().from(vendors).where(sql`${vendors.id} = ANY(${vendorIds})`)
+      ? await db.select().from(vendors).where(inArray(vendors.id, vendorIds))
       : [];
   const catIds = [...new Set(rows.map((r) => r.categoryId).filter(Boolean))];
   const cats =
     catIds.length > 0
-      ? await db.select().from(categories).where(sql`${categories.id} = ANY(${catIds})`)
+      ? await db.select().from(categories).where(inArray(categories.id, catIds))
       : [];
 
   return rows.map((r) => ({

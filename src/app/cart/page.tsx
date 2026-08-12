@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import { getCartWithItems } from "@/app/actions/cart";
+import { getCartReadOnly } from "@/app/actions/cart";
 import CartItemControls from "@/components/CartItemControls";
 import { formatMoney } from "@/lib/utils";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Cart" };
 
 export default async function CartPage() {
-  const { items, subtotal } = await getCartWithItems();
+  const { items, subtotal } = await getCartReadOnly();
 
   if (items.length === 0) {
     return (

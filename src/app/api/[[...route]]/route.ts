@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { handle } from "hono/vercel";
 import { z } from "zod";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { carts, cartItems, products, orders, orderItems, discounts, productImages } from "@/db/schema";
 import { stripe, hasStripeConfig } from "@/lib/stripe";
@@ -66,7 +66,7 @@ app.post("/checkout", async (c) => {
       ? await db
           .select()
           .from(productImages)
-          .where(sql`${productImages.productId} = ANY(${productIds})`)
+          .where(inArray(productImages.productId, productIds))
       : [];
   const imgByProduct = new Map<string, string>();
   for (const im of imgs) {

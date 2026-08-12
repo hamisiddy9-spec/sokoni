@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { Package, Boxes, CheckCircle2, Plus, Store, ExternalLink } from "lucide-react";
 import { db } from "@/db";
 import { vendors, products, productImages, users } from "@/db/schema";
@@ -69,7 +69,7 @@ export default async function VendorDashboardPage() {
           ? await db
               .select()
               .from(productImages)
-              .where(sql`${productImages.productId} = ANY(${productIds})`)
+              .where(inArray(productImages.productId, productIds))
           : [];
 
       return {

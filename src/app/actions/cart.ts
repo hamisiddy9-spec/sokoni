@@ -1,13 +1,17 @@
 "use server";
 
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { carts, cartItems, products, productImages } from "@/db/schema";
 import { generateSessionToken } from "@/lib/utils";
 
-/** Get-or-create a cart for the current session (guest or user). */
+/**
+ * Get-or-create a cart for the current session.
+ * NOTE: hii inaweza ku-set cookie — tumia tu kwenye Server Actions
+ * (Next 16 hairuhusu ku-set cookie wakati wa page render).
+ */
 export async function getOrCreateCart() {
   const cookieStore = await cookies();
   let token = cookieStore.get("sokoni_cart")?.value;
@@ -32,9 +36,15 @@ export async function getOrCreateCart() {
   return { cart: cart[0], token };
 }
 
-/** Full cart with items + products for rendering. */
-export async function getCartWithItems() {
-  const { cart } = await getOrCreateCart();
+/** Read-only cart lookup kwa page renders — haiseti cookies. */
+export async function getCartReadOnly() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("sokoni_cart")?.value;
+  if (!token) return { cart: null as any, items: [] as any[], subtotal: 0 };
+
+  const cart = await db.select().from(carts).where(eq(carts.sessionToken, token)).limit(1);
+  if (!cart[0]) return { cart: null, items: [], subtotal: 0 };
+
   const items = await db
     .select({
       item: cartItems,
@@ -42,7 +52,7 @@ export async function getCartWithItems() {
     })
     .from(cartItems)
     .innerJoin(products, eq(cartItems.productId, products.id))
-    .where(eq(cartItems.cartId, cart.id));
+    .where(eq(cartItems.cartId, cart[0].id));
 
   // Attach first image per product
   const productIds = items.map((r) => r.product.id);
@@ -51,7 +61,7 @@ export async function getCartWithItems() {
       ? await db
           .select()
           .from(productImages)
-          .where(sql`${productImages.productId} = ANY(${productIds})`)
+          .where(inArray(productImages.productId, productIds))
       : [];
   const imgByProduct = new Map<string, any>();
   for (const im of imgs) {
@@ -68,7 +78,7 @@ export async function getCartWithItems() {
 
   const subtotal = rows.reduce((sum, r) => sum + parseFloat(r.price) * r.quantity, 0);
 
-  return { cart, items: rows, subtotal };
+  return { cart: cart[0], items: rows, subtotal };
 }
 
 export async function addToCart(productId: string, quantity = 1) {

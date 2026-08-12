@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, inArray } from "drizzle-orm";
 import { Package, Store } from "lucide-react";
 import { db } from "@/db";
 import { products, vendors, productImages } from "@/db/schema";
@@ -50,7 +50,7 @@ export default async function AdminProductsPage() {
       const vendorIds = [...new Set(rows.map((r) => r.vendorId))];
       const vendorRows =
         vendorIds.length > 0
-          ? await db.select().from(vendors).where(sql`${vendors.id} = ANY(${vendorIds})`)
+          ? await db.select().from(vendors).where(inArray(vendors.id, vendorIds))
           : [];
       const productIds = rows.map((r) => r.id);
       const imgs =
@@ -58,7 +58,7 @@ export default async function AdminProductsPage() {
           ? await db
               .select()
               .from(productImages)
-              .where(sql`${productImages.productId} = ANY(${productIds})`)
+              .where(inArray(productImages.productId, productIds))
           : [];
       return {
         products: rows.map((p) => ({
