@@ -9,9 +9,10 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { products } from "./schema";
 
 /* ============================================================
@@ -70,7 +71,9 @@ export const pendingProducts = pgTable(
   (t) => [
     index("pending_status_idx").on(t.status),
     index("pending_group_idx").on(t.sourceGroupId),
-    index("pending_hash_idx").on(t.contentHash),
+    uniqueIndex("pending_hash_idx")
+      .on(t.contentHash)
+      .where(sql`${t.contentHash} is not null`),
   ]
 );
 

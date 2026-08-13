@@ -37,7 +37,7 @@ export default function PendingProductActions({
         await approvePendingProduct(pendingId, {
           name: form.name || suggestedName,
           price: form.price || suggestedPrice || "0",
-          description: form.description || undefined,
+          description: form.description,
           currency,
         });
         router.refresh();

@@ -36,43 +36,57 @@ export async function approvePendingProduct(
     .from(vendors)
     .where(eq(vendors.slug, "sokoni-digital"))
     .limit(1);
-
-  const slug = `${slugify(input.name)}-${Math.random().toString(36).slice(2, 5)}`;
-
-  const [product] = await db
-    .insert(products)
-    .values({
-      vendorId: vendor[0]?.id || (await db.select().from(vendors).limit(1))[0]?.id,
-      categoryId: input.categoryId || null,
-      name: input.name,
-      slug,
-      description: input.description || pending[0].suggestedDescription || null,
-      shortDescription: input.name.slice(0, 120),
-      price: input.price,
-      currency: input.currency || pending[0].currency || "TZS",
-      stock: input.stock ?? 1,
-      status: "active",
-      isVirtual: false,
-    })
-    .returning();
-
-  // Copy images kutoka pending
-  const images: string[] = Array.isArray(pending[0].images) ? (pending[0].images as string[]) : [];
-  for (const [i, url] of images.entries()) {
-    await db.insert(productImages).values({ productId: product.id, url, sortOrder: i });
+  if (!vendor[0]) {
+    throw new Error(
+      "Default vendor 'sokoni-digital' haipatikani. Tengeneza vendor hiyo kwanza kabla ya ku-approve."
+    );
   }
 
-  // Mark pending as approved + link product
-  await db
-    .update(pendingProducts)
-    .set({
-      status: "approved",
-      productId: product.id,
-      reviewedAt: new Date(),
-      reviewedBy: user.email,
-      updatedAt: new Date(),
-    })
-    .where(eq(pendingProducts.id, pendingId));
+  const slug = `${slugify(input.name)}-${Math.random().toString(36).slice(2, 5)}`;
+  const images: string[] = Array.isArray(pending[0].images) ? (pending[0].images as string[]) : [];
+
+  const product = await db.transaction(async (tx) => {
+    const [product] = await tx
+      .insert(products)
+      .values({
+        vendorId: vendor[0].id,
+        categoryId: input.categoryId || null,
+        name: input.name,
+        slug,
+        description:
+          input.description !== undefined
+            ? input.description || null
+            : pending[0].suggestedDescription || null,
+        shortDescription: input.name.slice(0, 120),
+        price: input.price,
+        currency: input.currency || pending[0].currency || "TZS",
+        stock: input.stock ?? 1,
+        status: "active",
+        isVirtual: false,
+      })
+      .returning();
+
+    // Copy images kutoka pending
+    if (images.length > 0) {
+      await tx.insert(productImages).values(
+        images.map((url, i) => ({ productId: product.id, url, sortOrder: i }))
+      );
+    }
+
+    // Mark pending as approved + link product
+    await tx
+      .update(pendingProducts)
+      .set({
+        status: "approved",
+        productId: product.id,
+        reviewedAt: new Date(),
+        reviewedBy: user.email,
+        updatedAt: new Date(),
+      })
+      .where(eq(pendingProducts.id, pendingId));
+
+    return product;
+  });
 
   revalidatePath("/admin/pending");
   revalidatePath("/products");

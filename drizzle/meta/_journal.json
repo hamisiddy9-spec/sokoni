@@ -15,6 +15,13 @@
       "when": 1786541566305,
       "tag": "0001_kind_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786595599436,
+      "tag": "0002_add_pending_hash_unique_index",
+      "breakpoints": true
     }
   ]
 }
