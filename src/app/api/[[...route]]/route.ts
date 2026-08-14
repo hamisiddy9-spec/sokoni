@@ -121,7 +121,8 @@ app.post("/whatsapp/ingest", async (c) => {
       return c.json({ ok: true, duplicate: false, id: row.id });
     } catch (err: any) {
       // Unique violation on content_hash — another request won the race, treat as duplicate.
-      if (err?.code === "23505") {
+      // postgres-js/drizzle wraps the raw pg error, so the code lives on `.cause`.
+      if (err?.code === "23505" || err?.cause?.code === "23505") {
         const existing = await db
           .select()
           .from(pendingProducts)
