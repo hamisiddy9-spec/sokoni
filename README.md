@@ -52,7 +52,7 @@ Test card (Stripe): `4242 4242 4242 4242` · future date · any CVC
 vercel deploy --prod
 ```
 
-Env vars zinazohitajika: `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_URL`.
+Env vars zinazohitajika: `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `STRIPE_SECRET_KEY`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_APP_URL`, `WHATSAPP_BOT_SECRET` (bearer token required by the WhatsApp bot to call `/api/whatsapp/ingest` and `/api/whatsapp/pending` — without it those endpoints reject every request).
 
 ## Project structure
 
