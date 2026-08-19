@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { handle } from "hono/vercel";
 import { z } from "zod";
 import { eq, and, desc, sql, inArray } from "drizzle-orm";
@@ -7,7 +7,8 @@ import { carts, cartItems, products, orders, orderItems, discounts, productImage
 import { pendingProducts } from "@/db/pending-schema";
 import { stripe, hasStripeConfig } from "@/lib/stripe";
 import { generateOrderNumber, computeDiscount } from "@/lib/utils";
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
+import { env } from "@/lib/env";
 
 const app = new Hono().basePath("/api");
 
@@ -54,11 +55,32 @@ const whatsappIngestSchema = z.object({
 });
 
 /**
+ * Bot auth — WhatsApp ingestion endpoints ni za bot (sio session ya browser),
+ * kwa hivyo tunatumia shared-secret bearer token badala ya Supabase session.
+ * Fail-closed: bila WHATSAPP_BOT_SECRET ikiwekwa, endpoints hizi zinakataa request zote.
+ */
+function requireBotAuth(c: Context): boolean {
+  const secret = env.WHATSAPP_BOT_SECRET;
+  if (!secret) return false;
+
+  const header = c.req.header("authorization") || "";
+  const [scheme, token] = header.split(" ");
+  if (scheme !== "Bearer" || !token) return false;
+
+  const tokenBuf = Buffer.from(token);
+  const secretBuf = Buffer.from(secret);
+  if (tokenBuf.length !== secretBuf.length) return false;
+  return timingSafeEqual(tokenBuf, secretBuf);
+}
+
+/**
  * POST /api/whatsapp/ingest
  * WhatsApp bot inaita hii kila bidhaa inapopostwa kwenye group/channel.
  * Inaweka pending product — admin anathibitisha kwenye /admin/pending.
  */
 app.post("/whatsapp/ingest", async (c) => {
+  if (!requireBotAuth(c)) return c.json({ error: "Unauthorized" }, 401);
+
   try {
     const body = await c.req.json().catch(() => null);
     const parsed = whatsappIngestSchema.safeParse(body);
@@ -71,40 +93,45 @@ app.post("/whatsapp/ingest", async (c) => {
     const hashInput = `${data.rawText || ""}|${(data.images || []).join(",")}`;
     const contentHash = createHash("sha256").update(hashInput).digest("hex").slice(0, 32);
 
-    const existing = await db
-      .select()
-      .from(pendingProducts)
-      .where(eq(pendingProducts.contentHash, contentHash))
-      .limit(1);
-    if (existing[0]) {
-      return c.json({ ok: true, duplicate: true, id: existing[0].id });
+    try {
+      const [row] = await db
+        .insert(pendingProducts)
+        .values({
+          sourceGroupId: data.sourceGroupId,
+          sourceGroupName: data.sourceGroupName,
+          sellerName: data.sellerName,
+          sellerPhone: data.sellerPhone,
+          messageId: data.messageId,
+          postedAt: data.postedAt ? new Date(data.postedAt) : new Date(),
+          rawText: data.rawText,
+          images: data.images,
+          make: data.make,
+          model: data.model,
+          price: data.price,
+          currency: data.currency,
+          suggestedName: data.suggestedName,
+          suggestedDescription: data.suggestedDescription,
+          suggestedCategory: data.suggestedCategory,
+          aiConfidence: data.aiConfidence,
+          contentHash,
+          status: "pending",
+        })
+        .returning();
+
+      return c.json({ ok: true, duplicate: false, id: row.id });
+    } catch (err: any) {
+      // Unique violation on content_hash — another request won the race, treat as duplicate.
+      // postgres-js/drizzle wraps the raw pg error, so the code lives on `.cause`.
+      if (err?.code === "23505" || err?.cause?.code === "23505") {
+        const existing = await db
+          .select()
+          .from(pendingProducts)
+          .where(eq(pendingProducts.contentHash, contentHash))
+          .limit(1);
+        return c.json({ ok: true, duplicate: true, id: existing[0]?.id });
+      }
+      throw err;
     }
-
-    const [row] = await db
-      .insert(pendingProducts)
-      .values({
-        sourceGroupId: data.sourceGroupId,
-        sourceGroupName: data.sourceGroupName,
-        sellerName: data.sellerName,
-        sellerPhone: data.sellerPhone,
-        messageId: data.messageId,
-        postedAt: data.postedAt ? new Date(data.postedAt) : new Date(),
-        rawText: data.rawText,
-        images: data.images,
-        make: data.make,
-        model: data.model,
-        price: data.price,
-        currency: data.currency,
-        suggestedName: data.suggestedName,
-        suggestedDescription: data.suggestedDescription,
-        suggestedCategory: data.suggestedCategory,
-        aiConfidence: data.aiConfidence,
-        contentHash,
-        status: "pending",
-      })
-      .returning();
-
-    return c.json({ ok: true, duplicate: false, id: row.id });
   } catch (err: any) {
     console.error("whatsapp ingest error:", err);
     return c.json({ error: err?.message || "Ingest imeshindikana." }, 500);
@@ -113,9 +140,11 @@ app.post("/whatsapp/ingest", async (c) => {
 
 /**
  * GET /api/whatsapp/pending
- * List ya pending products (kwa admin / bot status).
+ * List ya pending products (kwa bot status checks).
  */
 app.get("/whatsapp/pending", async (c) => {
+  if (!requireBotAuth(c)) return c.json({ error: "Unauthorized" }, 401);
+
   try {
     const rows = await db
       .select()
