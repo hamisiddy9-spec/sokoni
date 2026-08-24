@@ -10,6 +10,8 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  // WhatsApp ingestion bot auth (header: x-bot-token)
+  WHATSAPP_INGEST_TOKEN: z.string().optional(),
   // App
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
   APP_NAME: z.string().default("Sokoni"),
@@ -29,6 +31,7 @@ function loadEnv() {
       STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || "",
       STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET || "",
       NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "",
+      WHATSAPP_INGEST_TOKEN: process.env.WHATSAPP_INGEST_TOKEN || "",
       NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
       APP_NAME: process.env.APP_NAME || "Sokoni",
     };

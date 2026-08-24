@@ -1,3 +1,5 @@
+import { randomBytes } from "crypto";
+
 /** Format number as currency. */
 export function formatMoney(amount: string | number, currency = "USD"): string {
   const n = typeof amount === "string" ? parseFloat(amount) : amount;
@@ -19,19 +21,19 @@ export function slugify(input: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-/** Random order number: SOK-YYYYMMDD-XXXX */
+/** Random order number: SOK-YYYYMMDD-XXXX (crypto-random, collision-resistant) */
 export function generateOrderNumber(): string {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(
     d.getDate()
   ).padStart(2, "0")}`;
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  const rand = randomBytes(2).toString("hex").toUpperCase();
   return `SOK-${ymd}-${rand}`;
 }
 
-/** Random session token for guest carts. */
+/** Random session token for guest carts (crypto-random, 128-bit). */
 export function generateSessionToken(): string {
-  return `sess_${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+  return `sess_${randomBytes(16).toString("hex")}`;
 }
 
 /** Compute discount amount given code type/value and subtotal. */

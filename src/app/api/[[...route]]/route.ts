@@ -1,7 +1,7 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { handle } from "hono/vercel";
 import { z } from "zod";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { carts, cartItems, products, orders, orderItems, discounts, productImages } from "@/db/schema";
 import { pendingProducts } from "@/db/pending-schema";
@@ -54,11 +54,26 @@ const whatsappIngestSchema = z.object({
 });
 
 /**
+ * Bot token check kwa WhatsApp ingestion endpoints.
+ * - Ikiwa WHATSAPP_INGEST_TOKEN haijaseti → dev mode (ruhusu, lakini warn).
+ * - Ikiwa imeseti → lazima header `x-bot-token` ilingane, la sivyo 401.
+ */
+function isBotAuthorized(c: Context): boolean {
+  const expected = process.env.WHATSAPP_INGEST_TOKEN;
+  if (!expected) {
+    console.warn("[whatsapp] WHATSAPP_INGEST_TOKEN haujaseti — ingest iko wazi (dev mode)!");
+    return true;
+  }
+  return c.req.header("x-bot-token") === expected;
+}
+
+/**
  * POST /api/whatsapp/ingest
  * WhatsApp bot inaita hii kila bidhaa inapopostwa kwenye group/channel.
  * Inaweka pending product — admin anathibitisha kwenye /admin/pending.
  */
 app.post("/whatsapp/ingest", async (c) => {
+  if (!isBotAuthorized(c)) return c.json({ error: "Unauthorized" }, 401);
   try {
     const body = await c.req.json().catch(() => null);
     const parsed = whatsappIngestSchema.safeParse(body);
@@ -116,6 +131,7 @@ app.post("/whatsapp/ingest", async (c) => {
  * List ya pending products (kwa admin / bot status).
  */
 app.get("/whatsapp/pending", async (c) => {
+  if (!isBotAuthorized(c)) return c.json({ error: "Unauthorized" }, 401);
   try {
     const rows = await db
       .select()
@@ -151,14 +167,14 @@ app.post("/checkout", async (c) => {
     const cart = await db.select().from(carts).where(eq(carts.sessionToken, token)).limit(1);
     if (!cart[0]) return c.json({ error: "Cart haipatikani." }, 400);
 
-  const rows = await db
-    .select({
-      item: cartItems,
-      product: products,
-    })
-    .from(cartItems)
-    .innerJoin(products, eq(cartItems.productId, products.id))
-    .where(eq(cartItems.cartId, cart[0].id));
+    const rows = await db
+      .select({
+        item: cartItems,
+        product: products,
+      })
+      .from(cartItems)
+      .innerJoin(products, eq(cartItems.productId, products.id))
+      .where(eq(cartItems.cartId, cart[0].id));
 
   if (rows.length === 0) return c.json({ error: "Cart iko tupu." }, 400);
 
@@ -331,8 +347,25 @@ app.post("/checkout/confirm", async (c) => {
     const order = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
     if (!order[0]) return c.json({ error: "Order haipatikani." }, 404);
 
-    if (paymentIntentId && order[0].stripePaymentIntentId !== paymentIntentId) {
-      return c.json({ error: "Payment intent hailingani." }, 400);
+    // Idempotency: order ikiwa tayari imelipwa, usirudie — kinga dhidi ya
+    // double stock decrement (client confirm + webhook zikifyatuka zote mbili).
+    if (order[0].paymentStatus === "paid") {
+      return c.json({ ok: true, already: true, orderNumber: order[0].orderNumber });
+    }
+
+    if (hasStripeConfig()) {
+      // Payment bypass kinga: thibitisha na Stripe kwamba PaymentIntent
+      // imefanikiwa — tusitegemee taarifa ya client pekee.
+      if (!paymentIntentId) {
+        return c.json({ error: "paymentIntentId inahitajika." }, 400);
+      }
+      if (order[0].stripePaymentIntentId !== paymentIntentId) {
+        return c.json({ error: "Payment intent hailingani." }, 400);
+      }
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId);
+      if (pi.status !== "succeeded") {
+        return c.json({ error: "Malipo hayajathibitishwa na Stripe." }, 400);
+      }
     }
 
     await db
@@ -385,8 +418,26 @@ app.post("/checkout/confirm", async (c) => {
  */
 app.get("/orders/:orderNumber", async (c) => {
   const orderNumber = c.req.param("orderNumber");
+
+  // Usichague PII (email, phone, addresses) kwenye public order lookup —
+  // mtumiaji anafuatilia kwa order number pekee.
   const order = await db
-    .select()
+    .select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      status: orders.status,
+      subtotal: orders.subtotal,
+      discount: orders.discount,
+      shipping: orders.shipping,
+      tax: orders.tax,
+      total: orders.total,
+      currency: orders.currency,
+      paymentMethod: orders.paymentMethod,
+      paymentStatus: orders.paymentStatus,
+      notes: orders.notes,
+      createdAt: orders.createdAt,
+      updatedAt: orders.updatedAt,
+    })
     .from(orders)
     .where(eq(orders.orderNumber, orderNumber))
     .limit(1);
